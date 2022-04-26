@@ -1,0 +1,1084 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create VPC, Subnets and Transit Gateway for training"
+Parameters:
+
+    AvailabilityZones:
+        Description: The Availability Zones (AZs) to use for the subnets in the VPC. Select two (the logical order is preserved)
+        Type: List<AWS::EC2::AvailabilityZone::Name>
+#        MinLength: 2
+
+    INTERNETVPCCIDR:
+        Type: "String"
+        Description: "CIDR for INTERNET VPC"
+        Default: "10.100.20.0/22"
+
+    SUB01INTERNETVPCCIDR:
+        Type: "String"
+        Description: "CIDR for Subnet 01 of INTERNET VPC"
+        Default: "10.100.20.0/24"
+
+    SUB02INTERNETVPCCIDR:
+        Type: "String"
+        Description: "CIDR for Subnet 02 of INTERNET VPC"
+        Default: "10.100.21.0/24"
+
+    SUB03INTERNETVPCCIDR:
+        Type: "String"
+        Description: "CIDR for NLB Subnet 01 of INTERNET VPC"
+        Default: "10.100.22.0/24"
+
+    SUB04INTERNETVPCCIDR:
+        Type: "String"
+        Description: "CIDR for NLB Subnet 02 of INTERNET VPC"
+        Default: "10.100.23.0/24"
+
+
+    SPOKE01VPCCIDR:
+        Type: "String"
+        Description: "CIDR for Database VPC"
+        Default: "10.100.0.0/23"
+
+    SUB01SPOKE01CIDR:
+        Type: "String"
+        Description: "CIDR for Subnet 01 of Database VPC"
+        Default: "10.100.0.0/24"
+
+    SUB02SPOKE01CIDR:
+        Type: "String"
+        Description: "CIDR for Subnet 02 of Database VPC"
+        Default: "10.100.1.0/24"
+
+    SPOKE02VPCCIDR:
+        Type: "String"
+        Description: "CIDR for Shared-Services VPC"
+        Default: "10.100.4.0/22"
+
+    SUB01SPOKE02CIDR:
+        Type: "String"
+        Description: "CIDR for Sub 01 of Shared-Services VPC"
+        Default: "10.100.4.0/24"
+        
+    SUB02SPOKE02CIDR:
+        Type: "String"
+        Description: "CIDR for Sub 02 of Shared-Services VPC"
+        Default: "10.100.5.0/24"
+
+    GWLBSUB01SPOKE02CIDR:
+        Type: "String"
+        Description: "CIDR for GWLBe Subnet of Shared-Services VPC"
+        Default: "10.100.6.0/24"
+
+    GWLBSUB02SPOKE02CIDR:
+        Type: "String"
+        Description: "CIDR for GWLBe Subnet of Shared-Services VPC"
+        Default: "10.100.7.0/24"
+
+
+    SPOKE03VPCCIDR:
+        Type: "String"
+        Description: "CIDR for Web-Tier VPC"
+        Default: "10.100.8.0/22"
+
+    SUB01SPOKE03CIDR:
+        Type: "String"
+        Description: "CIDR for Sub 01 of Web-Tier VPC"
+        Default: "10.100.8.0/24"
+
+    SUB02SPOKE03CIDR:
+        Type: "String"
+        Description: "CIDR for Sub 02 of Web-Tier VPC"
+        Default: "10.100.9.0/24"
+
+
+    DEFAULTCIDR:
+        Type: "String"
+        Description: "Destination CIDR for all traffic"
+        Default: "0.0.0.0/0"
+
+#    CUSTOMCIDR:
+#        Type: "String"
+#        Description: "CIDR of route from Internet VPC to TGW"
+#        Default: "10.100.0.0/22"
+#
+    SpokeCIDR:
+        Type: "String"
+        Description: "CIDR of route for hosts in Spoke Networks"
+        Default: "10.100.0.0/8"
+    
+    LatestAmiId:
+        Type:  'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+        Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+        Description: "DO NOT CHANGE unless required. It picks latest Amazon Linux 2 AMI"
+
+    EC2InstanceType:
+        Type: "String"
+        Description: "Specify a valid instance type for EC2 tests hosts in Spokes"
+        Default: "t3.micro"
+
+    KeyName:
+        Description: Select name of an existing EC2 KeyPair to enable SSH access to the web server
+        Type: AWS::EC2::KeyPair::KeyName
+        ConstraintDescription: must be the name of an existing EC2 KeyPair.
+
+    SecVPC:
+        Description: VPC ID for the Security VPC.  Used for TGW attachment
+        Type: AWS::EC2::VPC::Id
+#        MinLength: 1
+        ConstraintDescription: You must select a SecVPC
+
+    NumberOfAZs:
+        Description: Number of Availability Zones to use in the VPC. This must match your selections in the list of Availability Zones parameter
+        Type: Number
+        Default: 2
+        MinValue: 2
+        MaxValue: 4
+
+    SECSUBNETS:
+        Description: Select at least 2 TGW subnets in the SEC VPC TGW Attachment
+        Type: List<AWS::EC2::Subnet::Id>
+#        MinLength: 2
+
+    GWLBSERVICEID:
+        Description: Service ID for GWLB
+        Type: "String"
+
+#Conditions:
+#    4AZs: !Equals [!Ref NumberOfAZs, 4]
+#    3AZs: !Or [!Equals [!Ref NumberOfAZs, 3], !Condition 4AZs]
+
+Resources:
+
+### VPC's
+    INTERNETVPC:
+        Type: "AWS::EC2::VPC"
+        Properties:
+            CidrBlock: !Ref INTERNETVPCCIDR
+            EnableDnsSupport: true
+            EnableDnsHostnames: false
+            InstanceTenancy: "default"
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["Internet-VPC", !Ref AWS::StackName]]
+
+    SPOKE01VPC:
+        Type: "AWS::EC2::VPC"
+        Properties:
+            CidrBlock: !Ref SPOKE01VPCCIDR
+            EnableDnsSupport: true
+            EnableDnsHostnames: false
+            InstanceTenancy: "default"
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["database", !Ref AWS::StackName]]
+
+    SPOKE02VPC:
+        Type: "AWS::EC2::VPC"
+        Properties:
+            CidrBlock: !Ref SPOKE02VPCCIDR
+            EnableDnsSupport: true
+            EnableDnsHostnames: false
+            InstanceTenancy: "default"
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["shared-services", !Ref AWS::StackName]]
+
+    SPOKE03VPC:
+        Type: "AWS::EC2::VPC"
+        Properties:
+            CidrBlock: !Ref SPOKE03VPCCIDR
+            EnableDnsSupport: true
+            EnableDnsHostnames: false
+            InstanceTenancy: "default"
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["web-tier", !Ref AWS::StackName]]
+### Subnets
+
+    SUB01SPOKE01:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB01SPOKE01CIDR
+            VpcId: !Ref SPOKE01VPC
+            AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["sub01-database", !Ref AWS::StackName]]
+    SUB02SPOKE01:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB02SPOKE01CIDR
+            VpcId: !Ref SPOKE01VPC
+            AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["sub02-database", !Ref AWS::StackName]]
+
+    SUB01SPOKE02:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB01SPOKE02CIDR
+            VpcId: !Ref SPOKE02VPC
+            AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["sub01-shared-services", !Ref AWS::StackName]]
+
+    SUB02SPOKE02:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB02SPOKE02CIDR
+            VpcId: !Ref SPOKE02VPC
+            AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["sub02-shared-services", !Ref AWS::StackName]]
+
+    SUBGWLBE01SPOKE02:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref GWLBSUB01SPOKE02CIDR
+            VpcId: !Ref SPOKE02VPC
+            AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["gwlbe-sub01-shared-services", !Ref AWS::StackName]]
+
+    SUBGWLBE02SPOKE02:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref GWLBSUB02SPOKE02CIDR
+            VpcId: !Ref SPOKE02VPC
+            AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["gwlbe-sub02-shared-services", !Ref AWS::StackName]]
+
+    SUB01SPOKE03:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB01SPOKE03CIDR
+            VpcId: !Ref SPOKE03VPC
+            AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["sub01-web-tier", !Ref AWS::StackName]]
+
+    SUB02SPOKE03:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB02SPOKE03CIDR
+            VpcId: !Ref SPOKE03VPC
+            AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["sub02-web-tier", !Ref AWS::StackName]]
+
+    SUB01INTERNET:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB01INTERNETVPCCIDR
+            VpcId: !Ref INTERNETVPC
+            AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: "sub-01-Internet"
+
+    SUB02INTERNET:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB02INTERNETVPCCIDR
+            VpcId: !Ref INTERNETVPC
+            AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: "sub-02-Internet"
+
+    SUB03INTERNET:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB03INTERNETVPCCIDR
+            VpcId: !Ref INTERNETVPC
+            AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: "sub01-nlb-Internet"
+
+    SUB04INTERNET:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            CidrBlock: !Ref SUB04INTERNETVPCCIDR
+            VpcId: !Ref INTERNETVPC
+            AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+            Tags:
+              -
+                Key: "Name"
+                Value: "sub02-nlb-Internet"
+
+
+### VPC/Subnet Route Tables
+
+    SPOKE01RT:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref SPOKE01VPC
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["database-RT", !Ref AWS::StackName]]
+
+    SUB01SPOKE02RT:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref SPOKE02VPC
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["Sub01-shared-services-RT", !Ref AWS::StackName]]
+
+    SUB02SPOKE02RT:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref SPOKE02VPC
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["Sub02-shared-services-RT", !Ref AWS::StackName]]
+
+    SPOKE03RT:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref SPOKE03VPC
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["web-tier-RT", !Ref AWS::StackName]]
+
+    SPOKE03IGWRT:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref SPOKE03VPC
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["web-tier-IGW-RT", !Ref AWS::StackName]]
+
+    SPOKE03GWLBERT:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref SPOKE03VPC
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["web-tier-GWLBE-RT", !Ref AWS::StackName]]
+
+    INTERNETSPOKERT:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref INTERNETVPC
+            Tags:
+              -
+                Key: "Name"
+                Value: "Internet-Spoke-RT"
+
+### IGW Attachment to VPC
+
+    INTERNETVPCGatewayAttachment:
+        Type: "AWS::EC2::VPCGatewayAttachment"
+        Properties:
+            InternetGatewayId: !Ref EC2InternetGateway
+            VpcId: !Ref INTERNETVPC
+
+#    SPOKE01VPCGatewayAttachment:
+#        Type: "AWS::EC2::VPCGatewayAttachment"
+#        Properties:
+#            InternetGatewayId: !Ref Spoke01InternetGateway
+#            VpcId: !Ref SPOKE01VPC
+#
+#    SPOKE02VPCGatewayAttachment:
+#        Type: "AWS::EC2::VPCGatewayAttachment"
+#        Properties:
+#            InternetGatewayId: !Ref Spoke02InternetGateway
+#            VpcId: !Ref SPOKE02VPC
+
+    SPOKE3VPCGatewayAttachment:
+        Type: "AWS::EC2::VPCGatewayAttachment"
+        Properties:
+            InternetGatewayId: !Ref Spoke03InternetGateway
+            VpcId: !Ref SPOKE03VPC
+
+### Spoke RT Associations
+    SUB01SPOKE01RTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref SPOKE01RT
+            SubnetId: !Ref SUB01SPOKE01
+
+    SUB02SPOKE01RTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref SPOKE01RT
+            SubnetId: !Ref SUB02SPOKE01
+
+    SUB01SPOKE02RTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref SUB01SPOKE02RT
+            SubnetId: !Ref SUB01SPOKE02
+
+    SUB02SPOKE02RTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref SUB02SPOKE02RT
+            SubnetId: !Ref SUB02SPOKE02
+
+    SUB03INTERNETRTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref INTERNETSPOKERT
+            SubnetId: !Ref SUB03INTERNET
+
+    SUB04INTERNETRTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref INTERNETSPOKERT
+            SubnetId: !Ref SUB04INTERNET
+
+
+
+    SUB01SPOKE03RTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref SPOKE03RT
+            SubnetId: !Ref SUB01SPOKE03
+
+    SUB02SPOKE03RTAssociation:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref SPOKE03GWLBERT
+            SubnetId: !Ref SUB02SPOKE03
+
+    IGWSPOKE03RTAssociation:
+        Type: AWS::EC2::GatewayRouteTableAssociation
+        Properties:
+            GatewayId: !Ref Spoke03InternetGateway
+            RouteTableId: !Ref SPOKE03IGWRT
+
+
+### IGW Creation
+    EC2InternetGateway:
+        Type: "AWS::EC2::InternetGateway"
+        Properties:
+            Tags:
+              -
+                Key: "Name"
+                Value: "internet-IGW"
+
+#    Spoke01InternetGateway:
+#        Type: "AWS::EC2::InternetGateway"
+#        Properties:
+#            Tags:
+#              -
+#                Key: "Name"
+#                Value: "database-IGW"
+#
+#    Spoke02InternetGateway:
+#        Type: "AWS::EC2::InternetGateway"
+#        Properties:
+#            Tags:
+#              -
+#                Key: "Name"
+#                Value: "shared-services-IGW"
+
+    Spoke03InternetGateway:
+        Type: "AWS::EC2::InternetGateway"
+        Properties:
+            Tags:
+              -
+                Key: "Name"
+                Value: "web-tier-IGW"
+### TGW Creation
+    EC2TransitGateway:
+        Type: "AWS::EC2::TransitGateway"
+        Properties:
+            Description: "Transit Hub TGW"
+            AutoAcceptSharedAttachments: "disable"
+            DefaultRouteTableAssociation: "disable"
+            DefaultRouteTablePropagation: "disable"
+            DnsSupport: "enable"
+            VpnEcmpSupport: "enable"
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["Transit-Hub", !Ref AWS::StackName]]
+
+### TGW Route Tables
+
+#    TGWINTERNETRT:
+#        Type: "AWS::EC2::TransitGatewayRouteTable"
+#        Properties:
+#            TransitGatewayId: !Ref EC2TransitGateway
+#            Tags:
+#              -
+#                Key: "Name"
+#                Value: "Internet-RT"
+    TGWSPOKERT:
+        Type: "AWS::EC2::TransitGatewayRouteTable"
+        Properties:
+            TransitGatewayId: !Ref EC2TransitGateway
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["Spoke-RT", !Ref AWS::StackName]]
+
+    TGWSECURITYRT:
+        Type: "AWS::EC2::TransitGatewayRouteTable"
+        Properties:
+            TransitGatewayId: !Ref EC2TransitGateway
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["Security-RT", !Ref AWS::StackName]]
+
+### TGW VPC Attachments
+
+    SPOKE01VPCTGWATTACHMENT:
+        Type: "AWS::EC2::TransitGatewayAttachment"
+        Properties:
+            TransitGatewayId: !Ref EC2TransitGateway
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["tgw-attach-database", !Ref AWS::StackName]]
+            VpcId: !Ref SPOKE01VPC
+            SubnetIds: 
+              - !Ref SUB01SPOKE01
+              - !Ref SUB02SPOKE01
+
+    SPOKE02VPCTGWATTACHMENT:
+        Type: "AWS::EC2::TransitGatewayAttachment"
+        Properties:
+            TransitGatewayId: !Ref EC2TransitGateway
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Join [ "-", ["tgw-attach-shared-services-vpc", !Ref AWS::StackName]]
+            VpcId: !Ref SPOKE02VPC
+            SubnetIds: 
+              - !Ref SUB01SPOKE02
+              - !Ref SUB02SPOKE02  
+
+    INTERNETVPCTGWATTACHMENT:
+        Type: "AWS::EC2::TransitGatewayAttachment"
+        Properties:
+            TransitGatewayId: !Ref EC2TransitGateway
+            Tags:
+              -
+                Key: "Name"
+                Value: "tgw-attach-internet-vpc"
+            VpcId: !Ref INTERNETVPC
+            SubnetIds:
+              - !Ref SUB01INTERNET
+              - !Ref SUB02INTERNET
+
+    SECURITYVPCTGWATTACHMENT:
+#        Type: "AWS::EC2::TransitGatewayAttachment"
+        Type: "AWS::EC2::TransitGatewayVpcAttachment"
+        Properties:
+            TransitGatewayId: !Ref EC2TransitGateway
+            Tags:
+              -
+                Key: "Name"
+                Value: !Join [ "-", ["tgw-attach-security-vpc", !Ref AWS::StackName]]
+            VpcId: !Ref SecVPC
+            SubnetIds: !Ref SECSUBNETS
+            Options: {"ApplianceModeSupport":"enable"}
+
+
+### TGW RT Association to Attachment
+    SPOKE01TGWASSOCIATION:
+        Type: "AWS::EC2::TransitGatewayRouteTableAssociation"
+        Properties:
+            TransitGatewayAttachmentId: !Ref SPOKE01VPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSPOKERT
+
+    SPOKE02TGWASSOCIATION:
+        Type: "AWS::EC2::TransitGatewayRouteTableAssociation"
+        Properties:
+            TransitGatewayAttachmentId: !Ref SPOKE02VPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSPOKERT
+
+    INTERNETTGWASSOCIATION:
+        Type: "AWS::EC2::TransitGatewayRouteTableAssociation"
+        Properties:
+            TransitGatewayAttachmentId: !Ref INTERNETVPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSPOKERT
+
+    SECURITYTGWASSOCIATION:
+        Type: "AWS::EC2::TransitGatewayRouteTableAssociation"
+        Properties:
+            TransitGatewayAttachmentId: !Ref SECURITYVPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSECURITYRT
+
+### Routes in a SUBNET RT
+    INTERNETVPCDEFAULTROUTE:
+        Type: "AWS::EC2::Route"
+        DependsOn: INTERNETVPCGatewayAttachment
+        Properties:
+            DestinationCidrBlock: !Ref DEFAULTCIDR
+            RouteTableId: !Ref INTERNETSPOKERT
+            GatewayId: !Ref EC2InternetGateway
+
+    INTERNETVPCSPOKECIDRROUTE:
+        Type: "AWS::EC2::Route"
+        DependsOn: INTERNETVPCGatewayAttachment
+        Properties:
+            DestinationCidrBlock: !Ref SpokeCIDR
+            RouteTableId: !Ref INTERNETSPOKERT
+            TransitGatewayId: !Ref EC2TransitGateway
+
+#    INTERNETSPOKETGWROUTE:
+#        Type: "AWS::EC2::Route"
+#        DependsOn: INTERNETTGWASSOCIATION
+#        Properties:
+#            DestinationCidrBlock: !Ref CUSTOMCIDR
+#            RouteTableId: !Ref INTERNETSPOKERT
+#            TransitGatewayId: !Ref EC2TransitGateway
+    
+#    SPOKE01TGWROUTE:
+#        Type: "AWS::EC2::Route"
+#        DependsOn: SPOKE01TGWASSOCIATION
+#        Properties:
+#            DestinationCidrBlock: !Ref SpokeCIDR
+#            RouteTableId: !Ref SPOKE01RT
+#            TransitGatewayId: !Ref EC2TransitGateway
+
+    SPOKE01INTERNETROUTE:
+        Type: "AWS::EC2::Route"
+        DependsOn: SPOKE01VPCTGWATTACHMENT
+        Properties:
+            DestinationCidrBlock: !Ref DEFAULTCIDR
+            RouteTableId: !Ref SPOKE01RT
+            TransitGatewayId: !Ref EC2TransitGateway
+
+#    SUB01SPOKE02TGWROUTE:
+#        Type: "AWS::EC2::Route"
+#        DependsOn: SPOKE02TGWASSOCIATION
+#        Properties:
+#            DestinationCidrBlock: !Ref SpokeCIDR
+#            RouteTableId: !Ref SUB01SPOKE02RT
+#            TransitGatewayId: !Ref EC2TransitGateway
+
+    SUB01SPOKE02INTERNETROUTE:
+        Type: "AWS::EC2::Route"
+        DependsOn: SPOKE02VPCTGWATTACHMENT
+        Properties:
+            DestinationCidrBlock: !Ref DEFAULTCIDR
+            RouteTableId: !Ref SUB01SPOKE02RT
+            TransitGatewayId: !Ref EC2TransitGateway
+
+#    SUB02SPOKE02TGWROUTE:
+#        Type: "AWS::EC2::Route"
+##        DependsOn: SPOKE02TGWASSOCIATION
+#        Properties:
+#            DestinationCidrBlock: !Ref SpokeCIDR
+#            RouteTableId: !Ref SUB02SPOKE02RT
+#            TransitGatewayId: !Ref EC2TransitGateway
+
+    SUB02SPOKE02INTERNETROUTE:
+        Type: "AWS::EC2::Route"
+        DependsOn: SPOKE02VPCTGWATTACHMENT
+        Properties:
+            DestinationCidrBlock: !Ref DEFAULTCIDR
+            RouteTableId: !Ref SUB02SPOKE02RT
+            TransitGatewayId: !Ref EC2TransitGateway
+
+    SUB01SPOKE02CROSSAZROUTE:
+        Type: "AWS::EC2::Route"
+#        DependsOn: GWLBE01100
+        Properties:
+            DestinationCidrBlock: !Ref SUB02SPOKE02CIDR
+            RouteTableId: !Ref SUB01SPOKE02RT
+            VpcEndpointId: !Ref GWLBE02100
+
+    SPOKE03GWLBEROUTE:
+        Type: "AWS::EC2::Route"
+#        DependsOn: GWLBE03
+        Properties:
+            DestinationCidrBlock: !Ref DEFAULTCIDR
+            RouteTableId: !Ref SPOKE03RT
+            VpcEndpointId: !Ref GWLBE03
+
+    SPOKE03INGRESSROUTE:
+        Type: "AWS::EC2::Route"
+#        DependsOn: GWLBE03
+        Properties:
+            DestinationCidrBlock: !Ref SUB01SPOKE03CIDR
+            RouteTableId: !Ref SPOKE03IGWRT
+            VpcEndpointId: !Ref GWLBE03
+
+    SPOKE03INTERNETROUTE:
+        Type: "AWS::EC2::Route"
+        DependsOn: SPOKE3VPCGatewayAttachment
+        Properties:
+            DestinationCidrBlock: !Ref DEFAULTCIDR
+            RouteTableId: !Ref SPOKE03GWLBERT
+            GatewayId: !Ref Spoke03InternetGateway
+
+### GWLBE creation in spokes (for distributed mode)
+    GWLBE01100:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            VpcId: !Ref SPOKE02VPC
+            VpcEndpointType: GatewayLoadBalancer
+            SubnetIds:
+                - !Ref SUBGWLBE01SPOKE02
+            ServiceName: !Ref GWLBSERVICEID
+    GWLBE02100:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            VpcId: !Ref SPOKE02VPC
+            VpcEndpointType: GatewayLoadBalancer
+            SubnetIds:
+                - !Ref SUBGWLBE02SPOKE02
+            ServiceName: !Ref GWLBSERVICEID
+    GWLBE03:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            VpcId: !Ref SPOKE03VPC
+            VpcEndpointType: GatewayLoadBalancer
+            SubnetIds:
+                - !Ref SUB02SPOKE03
+            ServiceName: !Ref GWLBSERVICEID
+
+#    SUB01SPOKE02MSRROUTE:
+#        Type: "AWS::EC2::Route"
+#        DependsOn: GWLBE01100
+#        Properties:
+#            DestinationCidrBlock: !Ref SPOKE02VPCCIDR
+#            RouteTableId: !Ref SUB01SPOKE02RT
+#            VpcEndpointId: !Ref GWLBE01100
+
+#    SUB02SPOKE02MSRROUTE:
+#        Type: "AWS::EC2::Route"
+#        DependsOn: GWLBE02100
+#        Properties:
+#            DestinationCidrBlock: !Ref SPOKE02VPCCIDR
+#            RouteTableId: !Ref SUB02SPOKE02RT
+#            VpcEndpointId: !Ref GWLBE02100
+
+### TGW Route Propagation
+
+
+    TGWSPOKE01PROPAGATE:
+        Type: "AWS::EC2::TransitGatewayRouteTablePropagation"
+        DependsOn: SPOKE01TGWASSOCIATION
+        Properties:
+            TransitGatewayAttachmentId: !Ref SPOKE01VPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSECURITYRT
+
+    TGWSPOKE02PROPAGATE:
+        Type: "AWS::EC2::TransitGatewayRouteTablePropagation"
+        DependsOn: SPOKE02TGWASSOCIATION
+        Properties:
+            TransitGatewayAttachmentId: !Ref SPOKE02VPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSECURITYRT
+
+    TGWINTERNETPROPAGATE:
+        Type: "AWS::EC2::TransitGatewayRouteTablePropagation"
+        DependsOn: INTERNETTGWASSOCIATION
+        Properties:
+            TransitGatewayAttachmentId: !Ref INTERNETVPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSECURITYRT
+
+### TGW Static Route
+    TGWSECURITYDEFAULT:
+        Type: "AWS::EC2::TransitGatewayRoute"
+        Properties:
+            DestinationCidrBlock: 0.0.0.0/0
+            TransitGatewayAttachmentId: !Ref SECURITYVPCTGWATTACHMENT
+            TransitGatewayRouteTableId: !Ref TGWSPOKERT
+
+### Test Instance Security Groups
+
+    Spoke01SecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: allow SSH
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 22
+                  ToPort: 22
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 111
+                  ToPort: 111
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: icmp
+                  FromPort: 8
+                  ToPort: -1
+                  CidrIp: 10.0.0.0/8
+            VpcId: !Ref SPOKE01VPC
+
+    Spoke02SecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: allow SSH
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 22
+                  ToPort: 22
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 111
+                  ToPort: 111
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: icmp
+                  FromPort: 8
+                  ToPort: -1
+                  CidrIp: 10.0.0.0/8
+            VpcId: !Ref SPOKE02VPC
+
+    Spoke03SecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: allow SSH
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 22
+                  ToPort: 22
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 111
+                  ToPort: 111
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: icmp
+                  FromPort: 8
+                  ToPort: -1
+                  CidrIp: 10.0.0.0/8
+            VpcId: !Ref SPOKE03VPC
+
+### EC2 Instances
+#    Ec2InternetVPC:
+#        Type: AWS::EC2::Instance
+#        Properties:
+#          ImageId: !Ref LatestAmiId
+#          InstanceType: !Ref EC2InstanceType
+#          KeyName: !Ref KeyName
+#          NetworkInterfaces:
+#            - AssociatePublicIpAddress: "true"
+#              DeviceIndex: "0"
+#              SubnetId: !Ref SUB01INTERNET
+#          Tags:
+#            -
+#              Key: "Name"
+#              Value: "InternetVPC-EC2"
+
+    INTERNETVPCInboundNLB:
+        Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+        Properties:
+          IpAddressType: ipv4
+#          Name: "chkp-gwlb-ws-inet-nlb02"
+          Scheme: internet-facing
+          Subnets:
+            - !Ref SUB03INTERNET
+            - !Ref SUB04INTERNET
+          Type: network
+          Tags:
+            - Key: "Name"
+              Value: !Join [ "-", [ "chkp-gwlb-ws-inet-nlb02", !Ref AWS::StackName ] ]
+
+    databaseNLBlistenerINTERNET:
+        Type: AWS::ElasticLoadBalancingV2::Listener
+        Properties:
+          DefaultActions:
+            - Type: forward
+              TargetGroupArn: !Ref databaseTG01INTERNET
+          LoadBalancerArn: !Ref INTERNETVPCInboundNLB
+          Port: 8022
+          Protocol: TCP
+
+    databaseTG01INTERNET:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+#          Name: "db-inet-tg01"
+          Port: 22
+          Protocol: TCP
+          VpcId: !Ref INTERNETVPC
+          HealthCheckEnabled: True
+          HealthCheckPort: "111"
+          HealthCheckProtocol: TCP
+          Targets:
+            - Id: !GetAtt Instance01Spoke01VPC.PrivateIp
+              Port: 22
+              AvailabilityZone: !Select ["0", Fn::GetAZs: !Ref 'AWS::Region']
+          TargetType: ip
+
+
+    sharedservices01NLBlistenerINTERNET:
+        Type: AWS::ElasticLoadBalancingV2::Listener
+        Properties:
+          DefaultActions:
+            - Type: forward
+              TargetGroupArn: !Ref sharedservices01TG01INTERNET
+          LoadBalancerArn: !Ref INTERNETVPCInboundNLB
+          Port: 8033
+          Protocol: TCP
+
+    sharedservices01TG01INTERNET:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+#          Name: "ss01-inet-tg01"
+          Port: 22
+          Protocol: TCP
+          VpcId: !Ref INTERNETVPC
+          HealthCheckEnabled: True
+          HealthCheckPort: "111"
+          HealthCheckProtocol: TCP
+          Targets:
+            - Id: !GetAtt Instance01Spoke02VPC.PrivateIp
+              Port: 22
+              AvailabilityZone: !Select ["0", Fn::GetAZs: !Ref 'AWS::Region']
+          TargetType: ip
+
+    sharedservices02NLBlistenerINTERNET:
+        Type: AWS::ElasticLoadBalancingV2::Listener
+        Properties:
+          DefaultActions:
+            - Type: forward
+              TargetGroupArn: !Ref sharedservices02TG02INTERNET
+          LoadBalancerArn: !Ref INTERNETVPCInboundNLB
+          Port: 8044
+          Protocol: TCP
+
+    sharedservices02TG02INTERNET:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+#          Name: "ss02-inet-tg02"
+          Port: 22
+          Protocol: TCP
+          VpcId: !Ref INTERNETVPC
+          HealthCheckEnabled: True
+          HealthCheckPort: "111"
+          HealthCheckProtocol: TCP
+          Targets:
+            - Id: !GetAtt Instance02Spoke02VPC.PrivateIp
+              Port: 22
+              AvailabilityZone: !Select ["1", Fn::GetAZs: !Ref 'AWS::Region']
+          TargetType: ip
+
+    Instance01Spoke01VPC:
+        Type: AWS::EC2::Instance
+        Properties:
+          ImageId: !Ref LatestAmiId
+          InstanceType: !Ref EC2InstanceType
+          KeyName: !Ref KeyName
+          NetworkInterfaces:
+            - AssociatePublicIpAddress: FALSE
+              DeviceIndex: "0"
+              SubnetId: !Ref SUB01SPOKE01
+              GroupSet:
+                  - !Ref Spoke01SecurityGroup
+          Tags:
+            -
+              Key: "Name"
+              Value: !Join [ "-", ["database-EC2", !Ref AWS::StackName]]
+
+    Instance01Spoke02VPC:
+        Type: AWS::EC2::Instance
+        Properties:
+          ImageId: !Ref LatestAmiId
+          InstanceType: !Ref EC2InstanceType
+          KeyName: !Ref KeyName
+          NetworkInterfaces:
+            - AssociatePublicIpAddress: FALSE
+              DeviceIndex: "0"
+              SubnetId: !Ref SUB01SPOKE02
+              GroupSet:
+                  - !Ref Spoke02SecurityGroup
+          Tags:
+            -
+              Key: "Name"
+              Value: !Join [ "-", ["shared-services-EC2-01", !Ref AWS::StackName]]
+
+    Instance02Spoke02VPC:
+        Type: AWS::EC2::Instance
+        Properties:
+          ImageId: !Ref LatestAmiId
+          InstanceType: !Ref EC2InstanceType
+          KeyName: !Ref KeyName
+          NetworkInterfaces:
+            - AssociatePublicIpAddress: FALSE
+              DeviceIndex: "0"
+              SubnetId: !Ref SUB02SPOKE02
+              GroupSet:
+                  - !Ref Spoke02SecurityGroup
+          Tags:
+            -
+              Key: "Name"
+              Value: !Join [ "-", ["shared-services-EC2-02", !Ref AWS::StackName]]
+
+    Instance01Spoke03VPC:
+        Type: AWS::EC2::Instance
+        Properties:
+          ImageId: !Ref LatestAmiId
+          InstanceType: !Ref EC2InstanceType
+          KeyName: !Ref KeyName
+          NetworkInterfaces:
+            - AssociatePublicIpAddress: TRUE
+              DeviceIndex: "0"
+              SubnetId: !Ref SUB01SPOKE03
+              GroupSet:
+                  - !Ref Spoke03SecurityGroup
+          Tags:
+            -
+              Key: "Name"
+              Value: !Join [ "-", ["web-tier-EC2", !Ref AWS::StackName]]
+
+
+
+Outputs:
+#    DatabaseEC2PubIp:
+#        Description: Public IP for Database EC2 Test Host
+#        Value: !GetAtt Instance01Spoke01VPC.PublicIp
+#    SharedServices01EC2PubIp:
+#        Description: Public IP for Shared-Services EC2-01 Test Host
+#        Value: !GetAtt Instance01Spoke02VPC.PublicIp
+#    SharedServices02EC2PubIp:
+#        Description: Public IP for Shared-Services EC2-02 Test Host
+#        Value: !GetAtt Instance02Spoke02VPC.PublicIp
+    WebTierEC2PubIp:
+        Description: Public IP for Web-Tier EC2 Test Host
+        Value: !GetAtt Instance01Spoke03VPC.PublicIp
+    DatabaseEC2PrivIp:
+        Description: Private IP for Database EC2 Test Host
+        Value: !GetAtt Instance01Spoke01VPC.PrivateIp
+    SharedServices01EC2PrivIp:
+        Description: Private IP for Shared-Services EC2-01 Test Host
+        Value: !GetAtt Instance01Spoke02VPC.PrivateIp
+    SharedServices02EC2PrivIp:
+        Description: Private IP for Shared-Services EC2-02 Test Host
+        Value: !GetAtt Instance02Spoke02VPC.PrivateIp
+    WebTierEC2PrivIp:
+        Description: Private IP for Web-Tier EC2 Test Host
+        Value: !GetAtt Instance01Spoke03VPC.PrivateIp
+    EC2TransitGateway:
+        Description: TGW ID
+        Value: !Ref EC2TransitGateway
+#    InternetNLB:
+#        Description: NLB Internet VPC
+#        Value: !Ref INTERNETVPCInboundNLB
