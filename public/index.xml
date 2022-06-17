@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Check Point CGNS on Check Point CloudGuard Network Security Workshop - AWS GWLB</title>
+    <link>/</link>
+    <description>Recent content in Check Point CGNS on Check Point CloudGuard Network Security Workshop - AWS GWLB</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language><atom:link href="/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Check Point CGNS Intro</title>
+      <link>/intro.html</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/intro.html</guid>
+      <description>Check Point CGNS Workshop - Intro Welcome In this workshop you will learn how to deploy Check Point CGNS with AWS Gateway load balancer as well as architecture options to support 3 different traffic flows: outbound, east-west, and inbound.</description>
+    </item>
+    
+    <item>
+      <title>Page 2</title>
+      <link>/01gettingstarted/2_page2.html</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/01gettingstarted/2_page2.html</guid>
+      <description>Page 2 Welcome In this workshop you will learn how to deploy Check Point CGNS with AWS Gateway load balancer as well as architecture options to support 3 different traffic flows: outbound, east-west, and inbound.
+Learning Objectives Deploy Cloud9 as an IDE for completing workshop exercises. How DevOps patterns help to release features and functionality faster. Best practices for implementing 2 pizza team pipelines. </description>
+    </item>
+    
+    <item>
+      <title>Stage 2 Page 2</title>
+      <link>/02_stage2/2_page2.html</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/02_stage2/2_page2.html</guid>
+      <description>Stage 2 Page 2 Welcome In this workshop you will learn how to deploy Check Point CGNS with AWS Gateway load balancer as well as architecture options to support 3 different traffic flows: outbound, east-west, and inbound.</description>
+    </item>
+    
+  </channel>
+</rss>
